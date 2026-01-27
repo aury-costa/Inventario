@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Inventário de Estoque</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">📦</div>
+        <div>
+          <div class="title">Inventário de Estoque</div>
+          <div class="subtitle">Compare o estoque do sistema com a contagem física</div>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <button id="btnExport" class="btn btn-secondary" title="Exportar contagens">Exportar</button>
+        <button id="btnReset" class="btn btn-danger" title="Zerar contagens">Zerar</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="panel panel-left">
+        <div class="panel-header">
+          <div class="panel-title">Base de produtos</div>
+          <div class="panel-actions">
+            <label class="file-pill" for="csvFile">
+              <input id="csvFile" type="file" accept=".csv,text/csv" />
+              <span>Carregar CSV</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="search">
+          <input id="searchInput" type="search" placeholder="Buscar por descrição, Código Produto ou Código Acesso (EAN/balança)..." />
+          <div class="search-hint">Dica: você pode digitar parte do nome do produto, ou o código do sistema/EAN.</div>
+        </div>
+
+        <div class="list-meta">
+          <div class="chip" id="chipTotal">Total: —</div>
+          <div class="chip" id="chipCounted">Contados: —</div>
+          <div class="chip" id="chipMissing">Faltando: —</div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table" id="productsTable" aria-label="Lista de produtos">
+            <thead>
+              <tr>
+                <th style="width: 110px;">Código</th>
+                <th>Produto</th>
+                <th style="width: 90px;" class="num">Sistema</th>
+                <th style="width: 90px;" class="num">Contado</th>
+                <th style="width: 100px;" class="num">Dif.</th>
+              </tr>
+            </thead>
+            <tbody id="productsTbody">
+              <tr><td colspan="5" class="muted">Carregando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel panel-right">
+        <div class="tabs">
+          <button class="tab active" data-tab="contagem">Contagem</button>
+          <button class="tab" data-tab="progresso">Progresso</button>
+          <button class="tab" data-tab="divergencia">Divergência</button>
+        </div>
+
+        <div class="tabpanels">
+          <div class="tabpanel active" id="tab-contagem">
+            <div class="detail">
+              <div class="detail-head">
+                <div>
+                  <div class="detail-title" id="detailTitle">Selecione um produto</div>
+                  <div class="detail-sub" id="detailSub">Use a busca para localizar rapidamente.</div>
+                </div>
+                <span class="badge" id="detailBadge">—</span>
+              </div>
+
+              <div class="detail-grid">
+                <div class="card">
+                  <div class="card-label">Código Produto (sistema)</div>
+                  <div class="card-value mono" id="detailCodigo">—</div>
+                </div>
+                <div class="card">
+                  <div class="card-label">Código Acesso (EAN/balança)</div>
+                  <div class="card-value mono" id="detailAcesso">—</div>
+                </div>
+                <div class="card">
+                  <div class="card-label">Qtd. em Estoque (sistema)</div>
+                  <div class="card-value" id="detailSistema">—</div>
+                </div>
+                <div class="card">
+                  <div class="card-label">Dias Últ. Entrada</div>
+                  <div class="card-value" id="detailDias">—</div>
+                </div>
+                <div class="card">
+                  <div class="card-label">Custo Bruto (un.)</div>
+                  <div class="card-value" id="detailCusto">—</div>
+                </div>
+                <div class="card">
+                  <div class="card-label">Impacto (R$)</div>
+                  <div class="card-value" id="detailImpacto">—</div>
+                </div>
+              </div>
+
+              <div class="count-box">
+                <div class="count-row">
+                  <label for="countInput">Quantidade contada (físico)</label>
+                  <input id="countInput" inputmode="decimal" placeholder="Ex.: 8" />
+                </div>
+                <div class="count-actions">
+                  <button id="btnSave" class="btn btn-primary">Salvar contagem</button>
+                  <button id="btnClearOne" class="btn btn-secondary">Limpar deste item</button>
+                </div>
+                <div class="mini-help" id="saveHint">As contagens ficam salvas neste dispositivo (localStorage).</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tabpanel" id="tab-progresso">
+            <div class="kpis">
+              <div class="kpi">
+                <div class="kpi-label">Total itens</div>
+                <div class="kpi-value" id="kpiTotal">—</div>
+              </div>
+              <div class="kpi">
+                <div class="kpi-label">Contados</div>
+                <div class="kpi-value" id="kpiCounted">—</div>
+              </div>
+              <div class="kpi">
+                <div class="kpi-label">OK (sem divergência)</div>
+                <div class="kpi-value" id="kpiOk">—</div>
+              </div>
+              <div class="kpi">
+                <div class="kpi-label">Com divergência</div>
+                <div class="kpi-value" id="kpiDiv">—</div>
+              </div>
+            </div>
+
+            <div class="charts">
+              <div class="chart-card">
+                <div class="chart-title">Status da contagem</div>
+                <canvas id="chartStatus" height="220"></canvas>
+              </div>
+              <div class="chart-card">
+                <div class="chart-title">Resumo financeiro</div>
+                <div class="money-grid">
+                  <div class="money">
+                    <div class="money-label">Impacto líquido (R$)</div>
+                    <div class="money-value" id="moneyNet">—</div>
+                  </div>
+                  <div class="money">
+                    <div class="money-label">Impacto absoluto (R$)</div>
+                    <div class="money-value" id="moneyAbs">—</div>
+                  </div>
+                </div>
+                <div class="money-note">Impacto = (Contado − Sistema) × Custo Bruto.</div>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table class="table" aria-label="Resumo do inventário">
+                <thead>
+                  <tr>
+                    <th style="width: 110px;">Código</th>
+                    <th>Produto</th>
+                    <th style="width: 90px;" class="num">Sistema</th>
+                    <th style="width: 90px;" class="num">Contado</th>
+                    <th style="width: 90px;" class="num">Dif.</th>
+                    <th style="width: 110px;" class="num">Impacto (R$)</th>
+                    <th style="width: 120px;">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="progressTbody">
+                  <tr><td colspan="7" class="muted">Sem dados.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="tabpanel" id="tab-divergencia">
+            <div class="charts">
+              <div class="chart-card">
+                <div class="chart-title">Top divergências (valor absoluto)</div>
+                <canvas id="chartTopDiv" height="260"></canvas>
+              </div>
+              <div class="chart-card">
+                <div class="chart-title">Divergências (lista)</div>
+                <div class="table-wrap tight">
+                  <table class="table" aria-label="Divergências">
+                    <thead>
+                      <tr>
+                        <th style="width: 110px;">Código</th>
+                        <th>Produto</th>
+                        <th style="width: 90px;" class="num">Dif.</th>
+                        <th style="width: 120px;" class="num">Impacto (R$)</th>
+                      </tr>
+                    </thead>
+                    <tbody id="divTbody">
+                      <tr><td colspan="4" class="muted">Sem divergências.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="note">
+              <div class="note-title">Como usar</div>
+              <ul>
+                <li>Procure um item, selecione e informe a quantidade física.</li>
+                <li>O app calcula a diferença (Contado − Sistema) e o impacto pelo custo.</li>
+                <li>Use <b>Exportar</b> para gerar um CSV das contagens e divergências.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="muted">Funciona offline (após abrir uma vez). Para uso em rede, basta hospedar esta pasta em qualquer servidor.</div>
+    </footer>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
