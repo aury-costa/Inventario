@@ -10,6 +10,9 @@
   <link rel="stylesheet" href="styles.css" />
   <script defer src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.31/dist/jspdf.plugin.autotable.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
@@ -24,6 +27,7 @@
       </div>
 
       <div class="top-actions">
+        <button id="btnPdf" class="btn btn-secondary" title="Gerar relatório em PDF">Relatório PDF</button>
         <button id="btnExport" class="btn btn-secondary" title="Exportar contagens">Exportar</button>
         <button id="btnReset" class="btn btn-danger" title="Zerar contagens">Zerar</button>
       </div>
@@ -42,7 +46,10 @@
         </div>
 
         <div class="search">
-          <input id="searchInput" type="search" placeholder="Buscar por descrição, Código Produto ou Código Acesso (EAN/balança)..." />
+          <div class="search-row">
+            <input id="searchInput" type="search" placeholder="Buscar por descrição, Código Produto ou Código Acesso (EAN/balança)..." />
+            <button id="btnScan" class="btn btn-secondary scan-btn" title="Ler código de barras (câmera)">📷 Ler</button>
+          </div>
           <div class="search-hint">Dica: você pode digitar parte do nome do produto, ou o código do sistema/EAN.</div>
         </div>
 
@@ -106,7 +113,7 @@
                   <div class="card-value" id="detailDias">—</div>
                 </div>
                 <div class="card">
-                  <div class="card-label">Custo Bruto (un.)</div>
+                  <div class="card-label">Custo Liq. Unitário</div>
                   <div class="card-value" id="detailCusto">—</div>
                 </div>
                 <div class="card">
@@ -166,7 +173,7 @@
                     <div class="money-value" id="moneyAbs">—</div>
                   </div>
                 </div>
-                <div class="money-note">Impacto = (Contado − Sistema) × Custo Bruto.</div>
+                <div class="money-note">Impacto = (Contado − Sistema) × Custo Liq. Unitário.</div>
               </div>
             </div>
 
@@ -235,5 +242,24 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Modal Leitor de Código -->
+  <div class="modal" id="scanModal" aria-hidden="true">
+    <div class="modal-backdrop" data-close="1"></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Leitor de código">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title">Ler código (EAN/balança)</div>
+          <div class="modal-sub">Aponte a câmera para o código. Ao detectar, a busca será preenchida automaticamente.</div>
+        </div>
+        <button class="btn btn-danger" id="btnCloseScan" title="Fechar">Fechar</button>
+      </div>
+      <div class="modal-body">
+        <video id="scanVideo" playsinline></video>
+        <div class="scan-hint" id="scanHint">Iniciando câmera…</div>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>

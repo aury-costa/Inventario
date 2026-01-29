@@ -10,3 +10,9 @@
 ## Dicas
 - As contagens ficam salvas neste dispositivo (localStorage).
 - Use **Exportar** para baixar um CSV com contagens/diferenças/impacto.
+
+
+## Novidades
+- Suporta coluna **Custo Liq. Unitário** (e também mantém compatibilidade com **Valor Custo Bruto**).
+- Botão **📷 Ler**: leitor de código de barras (EAN/balança) usando a câmera (se o navegador permitir).
+- Botão **Relatório PDF**: gera um PDF com resumo, top divergências e itens faltando.

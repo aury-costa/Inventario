@@ -440,6 +440,25 @@ function wireActions(){
 
   $("btnExport").addEventListener("click", exportCounts);
 
+
+  const btnPdf = $("btnPdf");
+  if(btnPdf) btnPdf.addEventListener("click", gerarRelatorioPdf);
+
+  const btnScan = $("btnScan");
+  if(btnScan) btnScan.addEventListener("click", openScanModal);
+
+  const btnCloseScan = $("btnCloseScan");
+  if(btnCloseScan) btnCloseScan.addEventListener("click", closeScanModal);
+
+  const scanModal = $("scanModal");
+  if(scanModal){
+    scanModal.addEventListener("click", (e)=>{
+      const t = e.target;
+      if(t && t.dataset && t.dataset.close) closeScanModal();
+    });
+  }
+
+
   $("csvFile").addEventListener("change", async (e)=>{
     const file = e.target.files?.[0];
     if(!file) return;
@@ -453,7 +472,7 @@ function exportCounts(){
     toast("Nada para exportar.");
     return;
   }
-  const header = ["Código Produto","Código Acesso","Produto","Qtd Sistema","Qtd Contada","Dif (Contado-Sistema)","Custo Bruto","Impacto (R$)","Status"];
+  const header = ["Código Produto","Código Acesso","Produto","Qtd Sistema","Qtd Contada","Dif (Contado-Sistema)","Custo Liq. Unitário","Impacto (R$)","Status"];
   const lines = [header.join(";")];
 
   for(const p of produtos){
@@ -524,9 +543,7 @@ function parseAndLoadCsv(csvText, { sourceName } = {}){
         const qtdSistema = parsePtNumber(r["Quantidade em Estoque"]);
         const codigoAcesso = norm(r["Código Acesso"]);
         const diasUltEntrada = norm(r["Dias Ult. Entrada"]);
-        const custo = parsePtNumber(
-  r["Custo Liq. Unitário"] ?? r["Valor Custo Bruto"]
-);
+        const custo = parsePtNumber((r["Custo Liq. Unitário"] ?? r["Valor Custo Bruto"]));
 
         const item = {
           codigoProduto,
@@ -568,6 +585,297 @@ async function tryAutoLoad(){
   }
 }
 
+
+/* ========== Leitor de Código (Câmera) ========== */
+let scanStream = null;
+let scanActive = false;
+
+function openScanModal(){
+  const modal = $("scanModal");
+  if(!modal) return toast("Scanner indisponível.");
+  modal.classList.add("show");
+  modal.setAttribute("aria-hidden","false");
+  startScanner();
+}
+
+function closeScanModal(){
+  const modal = $("scanModal");
+  if(!modal) return;
+  modal.classList.remove("show");
+  modal.setAttribute("aria-hidden","true");
+  stopScanner();
+}
+
+function setScanHint(msg){
+  const el = $("scanHint");
+  if(el) el.textContent = msg;
+}
+
+function stopScanner(){
+  scanActive = false;
+  try{
+    if(window.Quagga && Quagga.initialized){
+      Quagga.stop();
+      Quagga.initialized = false;
+    }
+  }catch(e){}
+  if(scanStream){
+    for(const t of scanStream.getTracks()) t.stop();
+  }
+  scanStream = null;
+  const v = $("scanVideo");
+  if(v) v.srcObject = null;
+}
+
+function applyScannedCode(code){
+  const s = norm(code);
+  if(!s) return;
+
+  $("searchInput").value = s;
+  renderTable();
+
+  const found = produtos.find(p => norm(p.codigoAcesso) === s || norm(p.codigoProduto) === s) ||
+                filteredProdutos()[0] || null;
+
+  if(found){
+    selectedKey = found._key;
+    renderTable();
+    renderDetail(found);
+    toast("Código detectado: " + s);
+  }else{
+    toast("Código detectado, mas nenhum item encontrado.");
+  }
+  closeScanModal();
+}
+
+async function startScanner(){
+  if(scanActive) return;
+  scanActive = true;
+
+  const video = $("scanVideo");
+  if(!video){
+    setScanHint("Elemento de vídeo não encontrado.");
+    return;
+  }
+
+  const hasBarcodeDetector = ("BarcodeDetector" in window);
+  if(hasBarcodeDetector){
+    try{
+      scanStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: false
+      });
+      video.srcObject = scanStream;
+      await video.play();
+      setScanHint("Procurando código…");
+
+      const detector = new BarcodeDetector({ formats: ["ean_13","ean_8","code_128","upc_a","upc_e"] });
+
+      const loop = async ()=>{
+        if(!scanActive) return;
+        try{
+          const barcodes = await detector.detect(video);
+          if(barcodes && barcodes.length){
+            const raw = barcodes[0].rawValue;
+            if(raw) applyScannedCode(raw);
+            return;
+          }
+        }catch(e){}
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+      return;
+    }catch(e){
+      console.warn(e);
+      // fallback abaixo
+    }
+  }
+
+  // Fallback Quagga
+  try{
+    setScanHint("Inicializando leitor…");
+    let host = document.getElementById("quaggaHost");
+    if(!host){
+      host = document.createElement("div");
+      host.id = "quaggaHost";
+      host.style.width = "100%";
+      host.style.borderRadius = "14px";
+      host.style.overflow = "hidden";
+      host.style.border = "1px solid rgba(255,255,255,.08)";
+      host.style.background = "rgba(0,0,0,.25)";
+      video.replaceWith(host);
+
+      const newVideo = document.createElement("video");
+      newVideo.id = "scanVideo";
+      newVideo.playsInline = true;
+      newVideo.style.display = "none";
+      host.parentElement.insertBefore(newVideo, host.nextSibling);
+    }
+
+    Quagga.init({
+      inputStream: {
+        type: "LiveStream",
+        target: host,
+        constraints: { facingMode: "environment" }
+      },
+      locator: { patchSize: "medium", halfSample: true },
+      numOfWorkers: navigator.hardwareConcurrency ? Math.max(1, Math.min(4, navigator.hardwareConcurrency - 1)) : 2,
+      decoder: { readers: ["ean_reader","ean_8_reader","code_128_reader","upc_reader","upc_e_reader"] },
+      locate: true
+    }, function(err){
+      if(err){
+        console.error(err);
+        setScanHint("Não foi possível iniciar a câmera.");
+        return;
+      }
+      Quagga.start();
+      Quagga.initialized = true;
+      setScanHint("Aponte para o código…");
+    });
+
+    Quagga.onDetected((data)=>{
+      const code = data?.codeResult?.code;
+      if(code) applyScannedCode(code);
+    });
+  }catch(e){
+    console.error(e);
+    setScanHint("Scanner indisponível neste navegador.");
+  }
+}
+
+/* ========== Relatório PDF (jsPDF) ========== */
+function gerarRelatorioPdf(){
+  if(!produtos.length){
+    toast("Carregue o CSV antes de gerar o PDF.");
+    return;
+  }
+  if(!window.jspdf || !window.jspdf.jsPDF){
+    toast("Biblioteca de PDF não carregou.");
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:"pt", format:"a4" });
+
+  const now = new Date();
+  const meta = getMeta() || {};
+  const totals = computeTotals();
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text("Relatório de Inventário", 40, 48);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text(`Arquivo: ${meta.sourceName || "CSV"} • Gerado em: ${now.toLocaleString("pt-BR")}`, 40, 66);
+
+  doc.setFont("helvetica","bold");
+  doc.setFontSize(11);
+  doc.text("Resumo", 40, 92);
+
+  const kpiRows = [
+    ["Total de itens", String(totals.total)],
+    ["Contados", String(totals.counted)],
+    ["Faltando", String(totals.missing)],
+    ["OK (sem divergência)", String(totals.ok)],
+    ["Com divergência", String(totals.div)],
+    ["Impacto líquido (R$)", formatMoney(totals.net)],
+    ["Impacto absoluto (R$)", formatMoney(totals.abs)],
+  ];
+
+  doc.autoTable({
+    startY: 102,
+    head: [["Indicador", "Valor"]],
+    body: kpiRows,
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [30, 40, 60] },
+    margin: { left: 40, right: 40 }
+  });
+
+  let y = doc.lastAutoTable.finalY + 18;
+
+  const diverg = [];
+  for(const p of produtos){
+    const m = computeRowMetrics(p);
+    if(m.hasCount && m.diff !== 0){
+      diverg.push({
+        codigo: p.codigoProduto || "",
+        acesso: p.codigoAcesso || "",
+        produto: p.produto || "",
+        diff: m.diff,
+        impacto: m.impacto,
+        abs: Math.abs(m.impacto || 0)
+      });
+    }
+  }
+  diverg.sort((a,b)=> b.abs - a.abs);
+
+  doc.setFont("helvetica","bold");
+  doc.setFontSize(11);
+  doc.text("Divergências (Top 50 por valor absoluto)", 40, y);
+  y += 10;
+
+  const divBody = diverg.slice(0,50).map(d => [
+    d.codigo,
+    d.acesso,
+    (d.produto.length>42 ? d.produto.slice(0,42)+"…" : d.produto),
+    String(d.diff),
+    formatMoney(d.impacto || 0)
+  ]);
+
+  doc.autoTable({
+    startY: y,
+    head: [["Código", "EAN/Acesso", "Produto", "Dif.", "Impacto (R$)"]],
+    body: divBody.length ? divBody : [["—","—","Sem divergências","—","—"]],
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [30, 40, 60] },
+    margin: { left: 40, right: 40 },
+    columnStyles: { 3: { halign: "right" }, 4: { halign: "right" } }
+  });
+
+  y = doc.lastAutoTable.finalY + 18;
+
+  const missing = [];
+  for(const p of produtos){
+    const m = computeRowMetrics(p);
+    if(!m.hasCount){
+      missing.push({
+        codigo: p.codigoProduto || "",
+        acesso: p.codigoAcesso || "",
+        produto: p.produto || "",
+        sistema: p.qtdSistema
+      });
+    }
+  }
+
+  doc.setFont("helvetica","bold");
+  doc.setFontSize(11);
+  doc.text("Itens faltando contar (primeiros 80)", 40, y);
+  y += 10;
+
+  const missBody = missing.slice(0,80).map(d => [
+    d.codigo,
+    d.acesso,
+    (d.produto.length>52 ? d.produto.slice(0,52)+"…" : d.produto),
+    String(d.sistema)
+  ]);
+
+  doc.autoTable({
+    startY: y,
+    head: [["Código", "EAN/Acesso", "Produto", "Qtd Sistema"]],
+    body: missBody.length ? missBody : [["—","—","Nenhum item faltando","—"]],
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [30, 40, 60] },
+    margin: { left: 40, right: 40 },
+    columnStyles: { 3: { halign: "right" } }
+  });
+
+  const fname = `relatorio_inventario_${now.toISOString().slice(0,10)}.pdf`;
+  doc.save(fname);
+  toast("PDF gerado.");
+}
+
+
 function init(){
   wireTabs();
   wireActions();
@@ -575,4 +883,6 @@ function init(){
   tryAutoLoad();
   renderDetail(null);
   renderChips();
-}document.addEventListener("DOMContentLoaded", init);
+}
+
+document.addEventListener("DOMContentLoaded", init);
