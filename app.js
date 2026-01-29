@@ -524,7 +524,9 @@ function parseAndLoadCsv(csvText, { sourceName } = {}){
         const qtdSistema = parsePtNumber(r["Quantidade em Estoque"]);
         const codigoAcesso = norm(r["Código Acesso"]);
         const diasUltEntrada = norm(r["Dias Ult. Entrada"]);
-        const custo = parsePtNumber(r["Valor Custo Bruto"]);
+        const custo = parsePtNumber(
+  r["Custo Liq. Unitário"] ?? r["Valor Custo Bruto"]
+);
 
         const item = {
           codigoProduto,
