@@ -575,6 +575,4 @@ function init(){
   tryAutoLoad();
   renderDetail(null);
   renderChips();
-}
-
-document.addEventListener("DOMContentLoaded", init);
+}document.addEventListener("DOMContentLoaded", init);
