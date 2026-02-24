@@ -625,6 +625,25 @@ function wireActions(){
 
   $("btnExport").addEventListener("click", exportCounts);
 
+  // Scanner (câmera)
+  const btnScan = $("btnScan");
+  const btnCloseScan = $("btnCloseScan");
+  const scanModal = $("scanModal");
+  if(btnScan) btnScan.addEventListener("click", openScanModal);
+  if(btnCloseScan) btnCloseScan.addEventListener("click", closeScanModal);
+  if(scanModal){
+    scanModal.querySelectorAll("[data-close]").forEach(el=>{
+      el.addEventListener("click", closeScanModal);
+    });
+  }
+  document.addEventListener("keydown", (e)=>{
+    if(e.key === "Escape"){
+      const m = $("scanModal");
+      if(m && m.classList.contains("show")) closeScanModal();
+    }
+  });
+
+
 
   // Campos de cabeçalho do relatório (salvos no dispositivo)
   const unidadeEl = $("metaUnidade");
