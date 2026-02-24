@@ -13,6 +13,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.31/dist/jspdf.plugin.autotable.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+  <script type="module" src="firebase.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
@@ -23,6 +24,18 @@
         <div>
           <div class="title">Inventário de Estoque</div>
           <div class="subtitle">Compare o estoque do sistema com a contagem física</div>
+        </div>
+      </div>
+
+      
+      <div class="meta-form" aria-label="Informações do inventário">
+        <div class="meta-field">
+          <label for="metaUnidade">Loja/Unidade</label>
+          <input id="metaUnidade" type="text" placeholder="Ex.: Loja 01" />
+        </div>
+        <div class="meta-field">
+          <label for="metaResponsavel">Responsável</label>
+          <input id="metaResponsavel" type="text" placeholder="Ex.: Patrick" />
         </div>
       </div>
 
@@ -49,6 +62,7 @@
           <div class="search-row">
             <input id="searchInput" type="search" placeholder="Buscar por descrição, Código Produto ou Código Acesso (EAN/balança)..." />
             <button id="btnScan" class="btn btn-secondary scan-btn" title="Ler código de barras (câmera)">📷 Ler</button>
+            <label class="collector-toggle" title="Modo contagem rápida (coletor)"><input id="toggleCollector" type="checkbox" /> <span>Modo Coletor</span></label>
           </div>
           <div class="search-hint">Dica: você pode digitar parte do nome do produto, ou o código do sistema/EAN.</div>
         </div>
@@ -82,6 +96,7 @@
           <button class="tab active" data-tab="contagem">Contagem</button>
           <button class="tab" data-tab="progresso">Progresso</button>
           <button class="tab" data-tab="divergencia">Divergência</button>
+          <button class="tab" data-tab="dashboard">Dashboard</button>
         </div>
 
         <div class="tabpanels">
@@ -177,6 +192,19 @@
               </div>
             </div>
 
+
+            <div class="filters">
+              <div class="filter-label">Filtro:</div>
+              <select id="progressFilter" class="select">
+                <option value="all">Todos</option>
+                <option value="ok">OK</option>
+                <option value="div">Divergência (geral)</option>
+                <option value="over">Sobra (Físico &gt; Sistema)</option>
+                <option value="under">Falta (Sistema &gt; Físico)</option>
+                <option value="missing">Faltando contar</option>
+              </select>
+            </div>
+
             <div class="table-wrap">
               <table class="table" aria-label="Resumo do inventário">
                 <thead>
@@ -198,6 +226,18 @@
           </div>
 
           <div class="tabpanel" id="tab-divergencia">
+
+            <div class="filters">
+              <div class="filter-label">Filtro:</div>
+              <div class="seg" role="group" aria-label="Filtro de divergência">
+                <button class="seg-btn active" data-divfilter="all">Todos</button>
+                <button class="seg-btn" data-divfilter="div">Divergência</button>
+                <button class="seg-btn" data-divfilter="over">Sobra</button>
+                <button class="seg-btn" data-divfilter="under">Falta</button>
+                <button class="seg-btn" data-divfilter="ok">OK</button>
+              </div>
+            </div>
+
             <div class="charts">
               <div class="chart-card">
                 <div class="chart-title">Top divergências (valor absoluto)</div>
@@ -228,7 +268,7 @@
               <ul>
                 <li>Procure um item, selecione e informe a quantidade física.</li>
                 <li>O app calcula a diferença (Contado − Sistema) e o impacto pelo custo.</li>
-                <li>Use <b>Exportar</b> para gerar um CSV das contagens e divergências.</li>
+                <li>Use <b>Exportar</b> para gerar um CSV das contagens, diferenças e impacto.</li>
               </ul>
             </div>
           </div>
@@ -242,6 +282,46 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+
+        <div class="tabpanel" id="tab-dashboard">
+          <div class="panel">
+            <div class="panel-title">Dashboard gerencial</div>
+            <div class="kpis">
+              <div class="kpi"><div class="kpi-label">Acurácia (itens)</div><div class="kpi-value" id="kpiAccuracy">—</div></div>
+              <div class="kpi"><div class="kpi-label">Quebra líquida (R$)</div><div class="kpi-value" id="kpiNetBreak">—</div></div>
+              <div class="kpi"><div class="kpi-label">Quebra absoluta (R$)</div><div class="kpi-value" id="kpiAbsBreak">—</div></div>
+              <div class="kpi"><div class="kpi-label">Produtividade</div><div class="kpi-value" id="kpiProd">—</div></div>
+            </div>
+
+            <div class="charts">
+              <div class="chart-card">
+                <div class="chart-title">Impacto por tipo</div>
+                <canvas id="breakTypeChart"></canvas>
+              </div>
+              <div class="chart-card">
+                <div class="chart-title">Top 20 impactos (R$)</div>
+                <canvas id="topImpactChart"></canvas>
+              </div>
+            </div>
+
+            <div class="panel-subtitle">Contagem por usuário</div>
+            <div class="table-wrap">
+              <table class="table" aria-label="Contagem por usuário">
+                <thead>
+                  <tr>
+                    <th>Usuário</th>
+                    <th class="num">Itens contados</th>
+                    <th class="num">Divergências</th>
+                    <th class="num">Impacto abs (R$)</th>
+                  </tr>
+                </thead>
+                <tbody id="userStatsBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
 
   <!-- Modal Leitor de Código -->
   <div class="modal" id="scanModal" aria-hidden="true">
@@ -258,6 +338,20 @@
         <video id="scanVideo" playsinline></video>
         <div class="scan-hint" id="scanHint">Iniciando câmera…</div>
       </div>
+    </div>
+  </div>
+
+
+  <!-- Login simples (usuário) -->
+  <div class="overlay" id="loginOverlay" aria-hidden="false">
+    <div class="overlay-card" role="dialog" aria-modal="true" aria-label="Login">
+      <div class="overlay-title">Entrar no Inventário</div>
+      <div class="overlay-sub">Digite seu usuário (ex.: <b>au.costa</b>). Sem senha por enquanto.</div>
+      <div class="overlay-row">
+        <input id="loginUser" type="text" placeholder="Usuário" autocomplete="username" />
+        <button class="btn btn-primary" id="btnLogin">Entrar</button>
+      </div>
+      <div class="overlay-hint">Este usuário será registrado nas contagens e no relatório.</div>
     </div>
   </div>
 
